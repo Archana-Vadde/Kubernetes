@@ -1,0 +1,5 @@
+kubectl get pods/rs/rc/deployment/svc/ns
+kubectl get all --namespaces
+kubectl delte pod/rs/rc/deploy/svc/ns filename
+kubectl apply -f filename.yaml
+kubectl create ns

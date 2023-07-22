@@ -1,0 +1,279 @@
+# pod 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod
+  namespace: dev-ns
+  labels:
+    app: frontend
+spec:
+  containers:
+  - name: demo-cont
+    image: docker.io/tomcat
+    ports:
+    - containerPort: 8080
+---
+
+# service
+apiVersion: v1
+kind: Service
+metadata:
+  name: demoservice
+  app: frontend
+spec:
+  type: ClusterIP/NodePort/LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    Protocol: TCP
+    targetPort: 80
+---
+
+# ReplicationController
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: demo-rc
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    app: front-end
+  template:
+    metadata:
+      name: demo-pod
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: demo-cont
+        image: docker.io/tomcat
+        ports:
+        - containerPort: 8080
+---
+
+# Replicaset
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: rs-demo
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      name: demo-pod
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: demo-cont
+        image: docker.io/tomcat
+        ports:
+        - containerPort: 8080
+---
+#  Deployment(blue)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-deployment
+  labels:
+    app: frontend
+spec:
+  replicas: 3
+  strategy:
+    type: ReCreate/RollingUpdate
+  selector:
+    matchLabels:
+      app: frontend
+      color: blue
+      version: v1
+  template:
+    metadata:
+      name: demo-pod
+      labels:
+        app: frontend
+        color: blue
+        version: v1
+    spec:
+      containers:
+      - name: demo-container
+        image: ashokit/javawebapp
+        ports:
+        - containerPort: 8080
+      
+###Deployment(Green)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-green-deploy
+  labels:
+    app: frontend
+spec:
+  replicas: 3
+  strategy:
+    type: ReCreate/RollingUpdate
+  selector:
+    matchLabels:
+      app: front-end
+      color: Green
+      version: v2
+  template:
+    metadata:
+      name: demo-pod
+      labels:
+        app: front-end
+        color: Green
+        version: v2
+    spec:
+      containers:
+        name: demo-container
+        image: ashokit/javawebapp
+        ports:
+        - containerPort: 8080
+
+##Daemonset
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: 
+  name: demo-daemonset
+  labels:
+    app: frontend
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      name: demo-pod
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: demo-container
+        image: httpd
+
+---
+# configMap
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: weshopify-db-config-map
+  labels: 
+    storage: weshopify-db-storage
+data: 
+ DB_DRIVER_NAME_VALUE: com.mysql.cj.jdbc.Driver
+ DB_HOST_SERVICE_NAME_VALUE: weshopify-app-db-service
+ DB_SCHEMA_VALUE: weshopify-app
+ DB_PORT_VALUE: "3306"
+  
+---
+# Secrets
+apiVersion: v1
+kind: Secret
+metadata: 
+ name: weshopify-db-config-secrete
+ labels: 
+  secrete: weshopify-db-config-secrete
+data:
+ DB_USER_NAME_VALUE: cm9vdA==
+ DB_PASSWORD_VALUE: cm9vdA==
+type: Opaque
+
+---
+# PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+ name: weshopify-db-pv
+ labels: 
+  name: weshopify-db-pv
+spec:
+  capacity: 
+   storage: 4Gi
+  accessModes: 
+   - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath: 
+    path: /opt/mysql
+
+---
+# PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weshopify-db-pvc
+spec:
+  volumeName: weshopify-db-pv      
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 4Gi
+
+---
+#Deployment,volume concept, env concept,secret,service
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+ name: weshopify-app-db-deployment
+ labels: 
+  app: weshopify-app-db
+spec:
+ template: 
+   metadata: 
+     labels: 
+       app: weshopify-app-db-pod
+   spec: 
+    volumes: 
+     - name: weshpify-app-db-volume
+       persistentVolumeClaim: 
+        claimName: weshopify-db-pvc
+    containers: 
+     - name: weshopify-app-db
+       image: mysql
+       ports: 
+        - containerPort: 3306
+       volumeMounts:
+         - name: weshpify-app-db-volume
+           mountPath: /opt/mysql
+       env: 
+        - name: MYSQL_ROOT_PASSWORD
+          #value: root
+          valueFrom: 
+           secretKeyRef: 
+            name: weshopify-db-config-secrete
+            key: DB_PASSWORD_VALUE
+        - name: MYSQL_DATABASE
+          #value: weshopify-app
+          valueFrom: 
+           configMapKeyRef: 
+            name: weshopify-db-config-map
+            key: DB_SCHEMA_VALUE
+ selector: 
+    matchLabels: 
+     app: weshopify-app-db-pod
+ replicas: 1
+---
+apiVersion: v1
+kind: Service
+metadata: 
+ name: weshopify-app-db-service
+ labels: 
+  app: weshopify-app-db-service
+spec:
+ type: ClusterIP
+ ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+ selector: 
+  app: weshopify-app-db-pod
